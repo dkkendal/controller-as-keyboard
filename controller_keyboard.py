@@ -2,13 +2,13 @@ from inputs import devices, get_gamepad
 import pprint
 import pyautogui
 
-for device in devices.gamepads:
-    print(device)
+AXIS_DEAD_ZONE = 2000
+AXIS_MAX = 32768 - AXIS_DEAD_ZONE
+AXIS_DPS = 50
 
 current = 0
 current_mode = None
-axis_max = 32768
-axis_deadzone = 2000
+move_mouse = False
 
 send_map = [
 #     Browser/nav mode
@@ -49,43 +49,71 @@ def univ_handler(event):
     print(event)
 
 
+def mouse_calculator(val):
+    if val < AXIS_DEAD_ZONE:
+        return 0
+
+    sign = val/abs(val)
+    val = val - sign * AXIS_DEAD_ZONE
+
+    # give extra dead zone where the mouse moves really slowly
+    if val < AXIS_DEAD_ZONE:
+        return 1
+
+    val = sign * AXIS_DPS * (val / AXIS_MAX)**2
+    return int(val)
+
+
+def mouse_handler(x, y):
+    global move_mouse
+    x = mouse_calculator(x)
+    y = mouse_calculator(y)
+    if abs(x) < 1 and abs(y) < 1:
+        # print('('+str(x)+', '+str(y)+')')
+        return
+    pyautogui.move(x, y, 0.01)
+
+
 def send_inputs():
     pyautogui.alert("Hello", "Test Alert")
 
 
-def gamepad_tester():
-    max_y = 0
-    max_x = 0
-    min_y = 0
-    min_x = 0
+def game_pad_tester():
+    global move_mouse
+    current_x = current_y = 0
 
-    while 1:
+    while True:
         try:
             events = get_gamepad()
             for event in events:
                 assert isinstance(event.state, object)
                 if event.code != "SYN_REPORT":
-                    print(event.ev_type, event.code, event.state)
-                    if event.code == "ABS_Y" and event.state > max_y:
-                        max_y = event.state
-                        print("max_y: " + str(max_y))
-                    if event.code == "ABS_X" and event.state > max_x:
-                        max_x = event.state
-                        print("max_x: " + str(max_x))
-                    if event.code == "ABS_Y" and event.state < min_y:
-                        min_y = event.state
-                        print("min_y: " + str(min_y))
-                    if event.code == "ABS_X" and event.state < min_x:
-                        min_x = event.state
-                        print("min_x: " + str(min_x))
+                    # print(event.ev_type, event.code, event.state)
+                    state = int(event.state)
+                    if event.code == "ABS_X":
+                        if abs(state) > AXIS_DEAD_ZONE:
+                            current_x = state
+                            move_mouse = True
+                        else:
+                            print("x: "+str(state))
+                    if event.code == "ABS_Y":
+                        if abs(state) > AXIS_DEAD_ZONE:
+                            current_y = -state
+                            move_mouse = True
+                        else:
+                            print("y: "+str(state))
+
+            if move_mouse:
+                mouse_handler(current_x, current_y)
+                current_y = current_x = 0
+                move_mouse = False
+
         except Exception as e:
             pprint.pprint(str(e))
             break
 
-        # time.sleep(0.05)
-
 
 # send_inputs()
-gamepad_tester()
+game_pad_tester()
 
 
